@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Work Tracker">
+<title>Work Tracker</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161d;
+    --border: #1e2330;
+    --border-hi: #2a3045;
+    --text: #e2e6f0;
+    --muted: #4a5068;
+    --faint: #1a1d28;
+    --green: #22d87a;
+    --green-border: rgba(34,216,122,0.28);
+    --red: #f0476a;
+    --amber: #f5a623;
+    --blue: #4d8ef5;
+    --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; min-height: 100vh; padding-bottom: 80px; }
+  body.loading #app { display: none; }
+  body.loading #loader { display: flex; }
+  #loader { display: none; position: fixed; inset: 0; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 999; }
+  #loader .icon { font-size: 40px; animation: pulse 1.5s ease-in-out infinite; }
+  #loader .text { font-size: 13px; color: var(--muted); letter-spacing: 0.12em; }
+  @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+  @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+  #app { max-width: 500px; margin: 0 auto; padding: 0 16px; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: flex-start; padding-top: 32px; padding-bottom: 4px; }
+  .topbar-left .label { font-size: 11px; color: var(--muted); letter-spacing: 0.18em; margin-bottom: 3px; }
+  .topbar-left .date { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+  .topbar-right { text-align: right; }
+  .clock { font-size: 24px; font-weight: 700; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; transition: color 0.3s; }
+  .status-row { display: flex; align-items: center; gap: 5px; justify-content: flex-end; margin-top: 2px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: all 0.3s; }
+  .dot.on-green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .dot.on-amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .status-text { font-size: 10px; letter-spacing: 0.1em; color: var(--muted); transition: color 0.3s; }
+  .sync-badge { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 4px; margin-top: 3px; justify-content: flex-end; letter-spacing: 0.06em; }
+  .sync-badge.syncing { color: var(--amber); }
+  .sync-badge.ok { color: var(--green); }
+  .sync-spin { display: inline-block; animation: spin 1s linear infinite; }
+
+  .nav { display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 4px; margin-top: 20px; }
+  .nav button { flex: 1; padding: 8px 0; background: transparent; border: none; border-radius: 10px; color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: 0.06em; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .nav button.active { background: var(--faint); color: var(--text); font-weight: 700; }
+
+  .view { display: none; flex-direction: column; gap: 12px; margin-top: 16px; }
+  .view.active { display: flex; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+  .card.green-border { border-color: var(--green-border); }
+  .card.hi-border { border-color: var(--border-hi); }
+  .p-card { padding: 26px 22px; }
+  .p-card-sm { padding: 16px 18px; }
+  .p-card-md { padding: 20px 20px 16px; }
+
+  .timer-display { font-size: 60px; font-weight: 800; letter-spacing: -0.04em; color: var(--muted); line-height: 1; margin-bottom: 4px; font-variant-numeric: tabular-nums; transition: color 0.4s; }
+  .timer-display.working { color: var(--green); }
+  .timer-display.on-break { color: var(--amber); }
+  .timer-sub { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .timer-total { font-size: 11px; color: var(--blue); margin-bottom: 20px; }
+  .shift-meta { display: flex; gap: 20px; margin-bottom: 22px; }
+  .meta-item .meta-label { font-size: 9px; color: var(--muted); letter-spacing: 0.14em; margin-bottom: 4px; }
+  .meta-item .meta-val { font-size: 16px; font-weight: 600; color: var(--faint); }
+  .meta-item .meta-val.green { color: var(--green); }
+  .meta-item .meta-val.amber { color: var(--amber); }
+
+  .btn-row { display: flex; gap: 8px; }
+  .btn { flex: 1; padding: 13px 0; border-radius: 12px; border: 1px solid transparent; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .btn-green { background: rgba(34,216,122,0.12); border-color: rgba(34,216,122,0.3); color: var(--green); }
+  .btn-green:hover { background: var(--green); color: #000; }
+  .btn-red { background: rgba(240,71,106,0.12); border-color: rgba(240,71,106,0.3); color: var(--red); }
+  .btn-red:hover { background: var(--red); color: #000; }
+  .btn-amber { background: rgba(245,166,35,0.12); border-color: rgba(245,166,35,0.3); color: var(--amber); }
+  .btn-amber:hover { background: var(--amber); color: #000; }
+  .btn-blue { background: rgba(77,142,245,0.12); border-color: rgba(77,142,245,0.3); color: var(--blue); }
+  .btn-blue:hover { background: var(--blue); color: #000; }
+  .btn-purple { background: rgba(167,139,250,0.12); border-color: rgba(167,139,250,0.3); color: var(--purple); }
+  .btn-purple:hover { background: var(--purple); color: #000; }
+  .btn-full { width: 100%; }
+  .btn:disabled { background: var(--faint); border-color: var(--border); color: var(--muted); cursor: not-allowed; }
+
+  .divider { height: 1px; background: var(--border); margin: 12px 0; }
+
+  .shift-list { display: flex; flex-direction: column; gap: 7px; }
+  .shift-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+  .shift-row .sr-left { display: flex; gap: 10px; align-items: center; }
+  .shift-idx { color: var(--muted); font-size: 10px; min-width: 20px; }
+  .ci { color: var(--green); }
+  .co { color: var(--red); }
+  .br { color: var(--amber); }
+  .sr-dur { color: var(--muted); font-weight: 600; }
+  .sr-dur.has-val { color: var(--text); }
+
+  .pill { font-size: 10px; letter-spacing: 0.12em; font-weight: 700; padding: 3px 8px; border-radius: 99px; display: inline-flex; align-items: center; }
+  .pill-green { background: rgba(34,216,122,0.1); color: var(--green); border: 1px solid rgba(34,216,122,0.25); }
+  .pill-amber { background: rgba(245,166,35,0.1); color: var(--amber); border: 1px solid rgba(245,166,35,0.25); }
+  .pill-blue { background: rgba(77,142,245,0.1); color: var(--blue); border: 1px solid rgba(77,142,245,0.25); }
+  .pill-muted { background: rgba(74,80,104,0.15); color: var(--muted); border: 1px solid rgba(74,80,104,0.25); }
+  .pill-purple { background: rgba(167,139,250,0.1); color: var(--purple); border: 1px solid rgba(167,139,250,0.25); }
+
+  .week-card { padding: 20px 20px 16px; }
+  .week-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .week-label { font-size: 11px; color: var(--muted); letter-spacing: 0.12em; }
+  .week-total { font-size: 13px; font-weight: 700; }
+  .bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 56px; }
+  .bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .bar-inner { width: 100%; height: 44px; display: flex; align-items: flex-end; }
+  .bar { width: 100%; border-radius: 4px 4px 0 0; transition: height 0.5s; }
+  .bar-lbl { font-size: 9px; color: var(--muted); }
+  .progress-labels { display: flex; justify-content: space-between; margin-top: 10px; font-size: 11px; color: var(--muted); }
+  .progress-track { margin-top: 8px; height: 3px; border-radius: 99px; background: var(--faint); overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width 0.8s; }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .stat-card { padding: 14px; }
+  .stat-label { font-size: 8px; color: var(--muted); letter-spacing: 0.12em; margin-bottom: 8px; }
+  .stat-val { font-size: 15px; font-weight: 700; }
+
+  .add-btn { width: 100%; padding: 13px 0; background: transparent; border: 1px dashed var(--border-hi); border-radius: 12px; color: var(--muted); font-size: 12px; letter-spacing: 0.1em; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+  .add-btn.open { background: var(--faint); color: var(--text); }
+
+  .form-card { padding: 20px 18px; }
+  .form-label { font-size: 10px; color: var(--muted); letter-spacing: 0.14em; margin-bottom: 14px; }
+  .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+  .field label { font-size: 10px; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; }
+  .field label.green { color: var(--green); }
+  .field label.red { color: var(--red); }
+  .field label.purple { color: var(--purple); }
+  .field input, .field select, .field textarea { background: var(--faint); border: 1px solid var(--border-hi); border-radius: 10px; padding: 9px 12px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; width: 100%; color-scheme: dark; }
+  .field input.purple-input { background: rgba(167,139,250,0.05); border-color: rgba(167,139,250,0.2); }
+  .field input.green-input { background: rgba(34,216,122,0.05); border-color: rgba(34,216,122,0.2); }
+  .field input.red-input { background: rgba(240,71,106,0.05); border-color: rgba(240,71,106,0.2); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .err-text { font-size: 11px; color: var(--red); margin-bottom: 8px; }
+  .ok-text { font-size: 11px; color: var(--green); margin-bottom: 8px; }
+
+  .day-card { padding: 16px 18px; }
+  .day-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .day-title { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; }
+  .day-total { font-size: 16px; font-weight: 700; color: var(--muted); }
+  .day-total.has-val { color: var(--text); }
+  .shift-item { display: flex; justify-content: space-between; align-items: center; background: var(--faint); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .shift-item:last-child { margin-bottom: 0; }
+  .si-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; }
+  .si-times { display: flex; gap: 12px; font-size: 13px; }
+  .si-right { display: flex; gap: 10px; align-items: center; }
+  .si-dur { font-size: 14px; font-weight: 700; color: var(--muted); }
+  .si-dur.has-val { color: var(--text); }
+  .del-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 2px; line-height: 1; transition: color 0.15s; }
+  .del-btn:hover { color: var(--red); }
+
+  .cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cat-chip { padding: 6px 12px; border-radius: 99px; border: 1px solid var(--border-hi); background: var(--faint); color: var(--muted); font-size: 11px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .cat-chip.active { border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.12); color: var(--purple); }
+
+  .photo-preview { position: relative; }
+  .photo-preview img { width: 100%; height: 140px; object-fit: cover; border-radius: 10px; cursor: zoom-in; border: 1px solid var(--border-hi); display: block; }
+  .photo-del { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.6); border: none; border-radius: 50%; width: 26px; height: 26px; color: #fff; font-size: 14px; cursor: pointer; line-height: 1; }
+  .photo-placeholder { padding: 18px 0; background: var(--faint); border: 1px dashed var(--border-hi); border-radius: 10px; color: var(--muted); font-size: 12px; cursor: pointer; font-family: inherit; letter-spacing: 0.06em; text-align: center; width: 100%; }
+
+  .exp-card { padding: 14px 16px; }
+  .exp-inner { display: flex; gap: 12px; align-items: flex-start; }
+  .exp-thumb { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; flex-shrink: 0; cursor: zoom-in; border: 1px solid var(--border-hi); }
+  .exp-icon { width: 52px; height: 52px; background: var(--faint); border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .exp-info { flex: 1; min-width: 0; }
+  .exp-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .exp-desc { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exp-amt { font-size: 15px; font-weight: 700; color: var(--purple); flex-shrink: 0; }
+  .exp-bottom { display: flex; gap: 8px; align-items: center; margin-top: 5px; }
+  .exp-date { font-size: 10px; color: var(--muted); }
+
+  .report-toggle { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px; gap: 2px; }
+  .report-toggle button { flex: 1; padding: 9px 0; background: transparent; border: none; border-radius: 9px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .report-toggle button.active { background: var(--faint); color: var(--text); }
+
+  .report-card { padding: 20px 20px 16px; }
+  .report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .report-title { font-size: 13px; font-weight: 600; }
+  .report-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .report-total { font-size: 22px; font-weight: 800; }
+  .breakdown { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; }
+  .breakdown-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  .breakdown-row span:last-child { color: var(--text); }
+
+  .empty { text-align: center; padding: 40px 0; color: var(--muted); font-size: 13px; }
+
+  .sync-how { display: flex; flex-direction: column; gap: 10px; }
+  .sync-step { display: flex; gap: 12px; align-items: flex-start; }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--faint); border: 1px solid var(--border-hi); display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--blue); flex-shrink: 0; font-weight: 700; }
+  .step-text { font-size: 12px; color: var(--muted); line-height: 1.5; padding-top: 2px; }
+
+  .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 90vh; border-radius: 12px; object-fit: contain; }
+  .lightbox-close { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.1); border: none; border-radius: 50%; width: 36px; height: 36px; color: #fff; font-size: 18px; cursor: pointer; }
+
+  .no-data { text-align: center; padding: 40px 0; color: var(--muted); font-size: 13px; }
+
+  .pay-modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:500; align-items:center; justify-content:center; padding:24px; }
+  .pay-modal-bg.open { display:flex; }
+  .pay-modal { background:var(--surface); border:1px solid var(--border-hi); border-radius:20px; padding:28px 24px; width:100%; max-width:400px; display:flex; flex-direction:column; gap:16px; }
+  .pay-modal h2 { font-size:14px; font-weight:700; letter-spacing:0.1em; color:var(--text); }
+  .pay-stat { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:var(--faint); border-radius:10px; }
+  .pay-stat-label { font-size:10px; color:var(--muted); letter-spacing:0.12em; }
+  .pay-stat-val { font-size:18px; font-weight:700; }
+  .pay-card { padding:16px 18px; }
+  .pay-item { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:var(--faint); border-radius:12px; margin-bottom:8px; }
+  .pay-item:last-child { margin-bottom:0; }
+  .pay-item-left .pay-date { font-size:12px; font-weight:600; margin-bottom:4px; }
+  .pay-item-left .pay-meta { font-size:11px; color:var(--muted); }
+  .pay-item-right { text-align:right; }
+  .pay-item-right .pay-hrs { font-size:16px; font-weight:700; color:var(--green); }
+  .pay-item-right .pay-exp { font-size:11px; color:var(--purple); margin-top:2px; }
+ 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+</style>
+</head>
+<body class="loading">
+
+<div id="loader">
+  <div class="icon">☁</div>
+  <div class="text">LOADING…</div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="label">WORK TRACKER</div>
+      <div class="date" id="date-display"></div>
+    </div>
+    <div class="topbar-right">
+      <div class="clock" id="clock-display">--:--:--</div>
+      <div class="status-row">
+        <span class="dot" id="status-dot"></span>
+        <span class="status-text" id="status-text">NOT STARTED</span>
+      </div>
+      <div class="sync-badge" id="sync-badge">☁ Synced</div>
+    </div>
+  </div>
+
+  <div class="nav" id="nav">
+    <button class="active" data-view="home">TODAY</button>
+    <button data-view="log">RECORDS</button>
+    <button data-view="expense">EXPENSES</button>
+    <button data-view="report">REPORT</button>
+    <button data-view="payments" id="payments-tab">PAY</button>
+    <button data-view="settings" id="settings-tab">⚙</button>
+  </div>
+
+  <!-- TODAY -->
+  <div class="view active" id="view-home">
+    <div class="card p-card" id="main-card">
+      <div class="timer-display" id="timer">—:—:—</div>
+      <div class="timer-sub" id="timer-sub">No active shift</div>
+      <div class="timer-total" id="timer-total" style="display:none"></div>
+      <div class="shift-meta" id="shift-meta" style="display:none">
+        <div class="meta-item"><div class="meta-label">CHECK IN</div><div class="meta-val green" id="meta-ci">——</div></div>
+        <div class="meta-item"><div class="meta-label">BREAK</div><div class="meta-val amber" id="meta-br">——</div></div>
+      </div>
+      <div class="btn-row" id="btn-row"></div>
+      <div id="today-shifts-wrap" style="display:none">
+        <div class="divider"></div>
+        <div class="shift-list" id="today-shifts"></div>
+      </div>
+    </div>
+
+    <div class="card week-card" id="week-card">
+      <div class="week-header">
+        <span class="week-label">THIS WEEK</span>
+        <span class="week-total" id="week-total">0h 00m</span>
+      </div>
+      <div class="bar-chart" id="week-bars"></div>
+      <div class="progress-labels"><span id="week-days-label">0 days</span><span>Target: 45h</span></div>
+      <div class="progress-track"><div class="progress-fill" id="week-progress" style="width:0%"></div></div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="card stat-card"><div class="stat-label">TOTAL WORKED</div><div class="stat-val" id="stat-total" style="color:var(--blue)">—</div></div>
+      <div class="card stat-card"><div class="stat-label">DAILY AVG.</div><div class="stat-val" id="stat-avg" style="color:var(--amber)">—</div></div>
+      <div class="card stat-card"><div class="stat-label">THIS MONTH EXP.</div><div class="stat-val" id="stat-exp" style="color:var(--purple)">—</div></div>
+    </div>
+  </div>
+
+  <!-- RECORDS -->
+  <div class="view" id="view-log">
+    <button class="add-btn" id="toggle-add-shift">+ ADD MANUAL SHIFT</button>
+    <div class="card form-card" id="add-shift-form" style="display:none">
+      <div class="form-label">NEW SHIFT</div>
+      <div class="field"><label>DATE</label><input type="date" id="m-date" color-scheme="dark"></div>
+      <div class="grid-2">
+        <div class="field"><label class="green">↑ CHECK IN</label><input type="time" id="m-in" class="green-input"></div>
+        <div class="field"><label class="red">↓ CHECK OUT</label><input type="time" id="m-out" class="red-input"></div>
+      </div>
+      <div class="field"><label>NOTE (optional)</label><input type="text" id="m-note" placeholder="e.g. night shift"></div>
+      <div class="err-text" id="m-err" style="display:none"></div>
+      <button class="btn btn-blue btn-full" onclick="saveManual()">SAVE</button>
+    </div>
+    <div id="log-list"></div>
+  </div>
+
+  <!-- EXPENSES -->
+  <div class="view" id="view-expense">
+    <div class="stat-grid" style="grid-template-columns:1fr 1fr">
+      <div class="card stat-card"><div class="stat-label">THIS MONTH</div><div class="stat-val" id="exp-month" style="color:var(--purple)">A$0.00</div></div>
+      <div class="card stat-card"><div class="stat-label">TOTAL</div><div class="stat-val" id="exp-total">A$0.00</div></div>
+    </div>
+    <button class="add-btn" id="toggle-add-exp">+ ADD EXPENSE</button>
+    <div class="card form-card" id="add-exp-form" style="display:none">
+      <div class="form-label">NEW EXPENSE</div>
+      <div class="grid-2">
+        <div class="field"><label>DATE</label><input type="date" id="e-date"></div>
+        <div class="field"><label class="purple">AMOUNT (A$)</label><input type="number" id="e-amt" class="purple-input" placeholder="0.00" min="0" step="0.01"></div>
+      </div>
+      <div class="field"><label>DESCRIPTION</label><input type="text" id="e-desc" placeholder="e.g. client lunch"></div>
+      <div class="field">
+        <label>CATEGORY</label>
+        <div class="cat-chips" id="cat-chips"></div>
+      </div>
+      <div class="field">
+        <label>PHOTO / RECEIPT (optional)</label>
+        <input type="file" id="e-photo-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(this)">
+        <div id="e-photo-wrap">
+          <button class="photo-placeholder" onclick="document.getElementById('e-photo-input').click()">📷  Add Photo</button>
+        </div>
+      </div>
+      <div class="err-text" id="e-err" style="display:none"></div>
+      <button class="btn btn-purple btn-full" onclick="saveExpense()">SAVE EXPENSE</button>
+    </div>
+    <div id="exp-list"></div>
+  </div>
+
+  <!-- REPORT -->
+  <div class="view" id="view-report">
+    <div class="report-toggle">
+      <button class="active" id="report-week-btn" onclick="setReportPeriod('week')">WEEKLY</button>
+      <button id="report-month-btn" onclick="setReportPeriod('month')">MONTHLY</button>
+    </div>
+    <div id="report-content"></div>
+  </div>
+</div>
+
+  <!-- PAYMENTS -->
+  <div class="view" id="view-payments">
+    <div id="pay-unpaid-banner"></div>
+    <div id="pay-history"></div>
+  </div>
+
+  <!-- SETTINGS / IMPORT -->
+  <div class="view" id="view-settings">
+    <div class="card form-card">
+      <div class="form-label">IMPORT DATA</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+        Paste exported JSON from the old app to import your records and expenses.
+      </div>
+      <div class="field">
+        <label>PASTE JSON HERE</label>
+        <textarea id="import-text" rows="7" placeholder='Paste exported data…' style="background:var(--faint);border:1px solid var(--border-hi);border-radius:10px;padding:10px 12px;color:var(--text);font-size:11px;font-family:inherit;outline:none;resize:vertical;color-scheme:dark;width:100%"></textarea>
+      </div>
+      <div class="err-text" id="import-err" style="display:none"></div>
+      <div class="ok-text" id="import-ok" style="display:none">✓ Data imported and saved!</div>
+      <button class="btn btn-blue btn-full" onclick="importData()">IMPORT & MERGE</button>
+    </div>
+
+    <div class="card p-card-sm">
+      <div style="font-size:11px;color:var(--muted);letter-spacing:0.14em;margin-bottom:10px">EXPORT DATA</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Copy all your data as JSON.</div>
+      <button class="btn btn-full" id="export-btn" onclick="exportData()" style="background:rgba(74,80,104,0.15);border-color:var(--border-hi);color:var(--muted)">COPY TO CLIPBOARD</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- PAYMENT MODAL -->
+<div class="pay-modal-bg" id="pay-modal-bg">
+  <div class="pay-modal">
+    <h2>💰 MARK AS PAID</h2>
+    <div class="pay-stat">
+      <span class="pay-stat-label">UNPAID HOURS</span>
+      <span class="pay-stat-val" id="pay-hours" style="color:var(--green)">—</span>
+    </div>
+    <div class="pay-stat">
+      <span class="pay-stat-label">UNPAID EXPENSES</span>
+      <span class="pay-stat-val" id="pay-exps" style="color:var(--purple)">—</span>
+    </div>
+    <div class="field" style="margin:0">
+      <label style="font-size:10px;color:var(--muted);letter-spacing:0.12em">NOTE (optional)</label>
+      <input type="text" id="pay-note" placeholder="e.g. Week 1 May" style="background:var(--faint);border:1px solid var(--border-hi);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;width:100%;color-scheme:dark;margin-top:5px">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-full" onclick="closePayModal()" style="background:var(--faint);border-color:var(--border-hi);color:var(--muted)">CANCEL</button>
+      <button class="btn btn-green btn-full" onclick="confirmPayment()">CONFIRM PAID</button>
+    </div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="">
+  <button class="lightbox-close" onclick="closeLightbox()">×</button>
+</div>
+
+<script>
+// ── Supabase config ───────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://vkowfhtwbsyoxkqblniq.supabase.co";
+const SUPABASE_KEY = "sb_publishable__Z2wJPVzxacHjElYY44F8A_4WJlVeY_";
+
+async function sbGet() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/work_tracker?id=eq.main&select=records,expenses,payments`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    const data = await res.json();
+    if (data && data[0]) return data[0];
+  } catch(_) {}
+  return null;
+}
+
+async function sbSet(records, expenses) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/work_tracker?id=eq.main`, {
+      method: "PATCH",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({ records, expenses, payments, updated_at: new Date().toISOString() })
+    });
+    return true;
+  } catch(_) { return false; }
+}
+
+// ── local cache ───────────────────────────────────────────────────────────────
+const LS_R = "att-pro-v3", LS_E = "att-exp-v1";
+const lsGet = (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(_) {} };
+
+// ── state ─────────────────────────────────────────────────────────────────────
+let records = {};
+let expenses = [];
+let payments = []; // { id, date, hours, totalMs, expenseTotal, note, paidAt }
+let currentView = "home";
+let reportPeriod = "week";
+let syncTimer = null;
+let currentPhoto = null;
+let currentCat = "Food";
+const CATS = ["Food","Transport","Accommodation","Equipment","Stationery","Entertainment","Other"];
+const CAT_ICONS = {Food:"🍽",Transport:"🚗",Accommodation:"🏨",Equipment:"🔧",Stationery:"📎",Entertainment:"🤝",Other:"📋"};
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+const pad = n => String(n).padStart(2,"0");
+const todayISO = () => new Date().toISOString().slice(0,10);
+const fmtTime = iso => { if(!iso) return null; const d=new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fmtDur = ms => {
+  if(!ms||ms<=0) return null;
+  const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000),s=Math.floor((ms%60000)/1000);
+  return {h,m,s,str:`${pad(h)}:${pad(m)}:${pad(s)}`,hm:`${h}h ${pad(m)}m`};
+};
+const shiftMs = sh => sh?.checkIn&&sh?.checkOut ? new Date(sh.checkOut)-new Date(sh.checkIn)-(sh.breakMs||0) : null;
+const dayTotalMs = shifts => (shifts||[]).reduce((a,sh)=>a+(shiftMs(sh)||0),0);
+const weekStart = iso => { const d=new Date(iso),day=d.getDay()||7,m=new Date(d); m.setDate(d.getDate()-day+1); return m.toISOString().slice(0,10); };
+const monthOf = iso => iso.slice(0,7);
+const fmtDay = iso => new Date(iso).toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"});
+const fmtMonth = ym => { const [y,m]=ym.split("-"); return new Date(y,m-1).toLocaleDateString("en-AU",{month:"long",year:"numeric"}); };
+const uid = () => Math.random().toString(36).slice(2,8);
+const fmtMoney = n => Number(n).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// ── sync ──────────────────────────────────────────────────────────────────────
+function setSyncBadge(status) {
+  const el = document.getElementById("sync-badge");
+  el.className = "sync-badge " + status;
+  if(status==="syncing") el.innerHTML = '<span class="sync-spin">↻</span> Syncing…';
+  else if(status==="ok") el.innerHTML = '✓ Saved';
+  else el.innerHTML = '☁ Synced';
+}
+
+function scheduleSync() {
+  lsSet(LS_R, records); lsSet(LS_E, expenses); lsSet("att-pay-v1", payments);
+  if(syncTimer) clearTimeout(syncTimer);
+  setSyncBadge("syncing");
+  syncTimer = setTimeout(async () => {
+    const ok = await sbSet(records, expenses);
+    setSyncBadge(ok ? "ok" : "idle");
+    if(ok) setTimeout(() => setSyncBadge("idle"), 2000);
+  }, 1500);
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  document.body.classList.add("loading");
+  // Try Supabase
+  const remote = await sbGet();
+  if(remote && remote.records && Object.keys(remote.records).length > 0) {
+    records = remote.records;
+    expenses = remote.expenses || [];
+    payments = remote.payments || [];
+    lsSet(LS_R, records); lsSet(LS_E, expenses); lsSet("att-pay-v1", payments);
+  } else {
+    // Fall back to local
+    records = lsSet(LS_R) || lsGet(LS_R) || {};
+    expenses = lsGet(LS_E) || [];
+    payments = lsGet("att-pay-v1") || [];
+    // Migrate legacy keys
+    for(const k of ["att-pro-v1","att-pro-v2"]) {
+      const old = lsGet(k);
+      if(!old) continue;
+      for(const [date,rec] of Object.entries(old)) {
+        if(!rec) continue;
+        if(Array.isArray(rec)) { records[date]=[...(records[date]||[]),...rec]; continue; }
+        if(rec.checkIn) records[date]=[...(records[date]||[]),{id:uid(),checkIn:rec.checkIn,checkOut:rec.checkOut||null,breakMs:rec.breakMs||0,note:""}];
+      }
+    }
+  }
+  document.body.classList.remove("loading");
+  renderAll();
+  startClock();
+  initNav();
+  initForms();
+}
+
+// ── clock ─────────────────────────────────────────────────────────────────────
+function startClock() {
+  setInterval(() => { renderTopbar(); renderHome(); }, 1000);
+}
+
+// ── nav ───────────────────────────────────────────────────────────────────────
+function initNav() {
+  document.querySelectorAll("#nav button").forEach(btn => {
+    btn.onclick = () => {
+      currentView = btn.dataset.view;
+      document.querySelectorAll("#nav button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+      document.getElementById("view-"+currentView).classList.add("active");
+      renderView(currentView);
+    };
+  });
+}
+
+function renderAll() { renderTopbar(); renderHome(); renderLog(); renderExpenses(); renderReport(); renderPayments(); }
+function renderView(v) {
+  if(v==="home") renderHome();
+  else if(v==="log") renderLog();
+  else if(v==="expense") renderExpenses();
+  else if(v==="report") renderReport();
+  else if(v==="payments") renderPayments();
+}
+
+// ── topbar ────────────────────────────────────────────────────────────────────
+function renderTopbar() {
+  const now = new Date();
+  document.getElementById("date-display").textContent = now.toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"});
+  document.getElementById("clock-display").textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const today = todayISO();
+  const todayShifts = records[today]||[];
+  const active = todayShifts.find(s=>s.checkIn&&!s.checkOut);
+  const isWorking = !!active;
+  const isBreak = !!(active?.breakStart);
+  const dot = document.getElementById("status-dot");
+  const statusText = document.getElementById("status-text");
+  const clock = document.getElementById("clock-display");
+  dot.className = "dot" + (isWorking ? (isBreak?" on-amber":" on-green") : "");
+  statusText.style.color = isWorking ? (isBreak?"var(--amber)":"var(--green)") : "var(--muted)";
+  clock.style.color = isWorking ? "var(--green)" : "var(--muted)";
+  if(isWorking) statusText.textContent = isBreak ? "ON BREAK" : "WORKING";
+  else if(todayShifts.some(s=>s.checkOut)) statusText.textContent = "COMPLETED";
+  else statusText.textContent = "NOT STARTED";
+}
+
+// ── home ──────────────────────────────────────────────────────────────────────
+function renderHome() {
+  const today = todayISO();
+  const todayShifts = records[today]||[];
+  const active = todayShifts.find(s=>s.checkIn&&!s.checkOut);
+  const isWorking = !!active;
+  const isBreak = !!(active?.breakStart);
+
+  const liveMs = isWorking
+    ? Date.now()-new Date(active.checkIn)-(active.breakMs||0)-(isBreak?Date.now()-new Date(active.breakStart):0)
+    : null;
+  const liveDur = fmtDur(liveMs);
+  const todayTotal = dayTotalMs(todayShifts)+(liveMs||0);
+
+  // Timer
+  const timerEl = document.getElementById("timer");
+  timerEl.textContent = liveDur ? liveDur.str : "—:—:—";
+  timerEl.className = "timer-display" + (isWorking&&!isBreak?" working":isBreak?" on-break":"");
+
+  document.getElementById("timer-sub").textContent = liveDur ? `Active shift: ${liveDur.hm}` : "No active shift";
+  const totalEl = document.getElementById("timer-total");
+  if(todayTotal>0) { totalEl.style.display="block"; totalEl.textContent=`Today total: ${fmtDur(todayTotal)?.hm} · ${todayShifts.length} shift${todayShifts.length!==1?"s":""}`; }
+  else totalEl.style.display="none";
+
+  // Meta
+  const metaEl = document.getElementById("shift-meta");
+  if(active) {
+    metaEl.style.display="flex";
+    document.getElementById("meta-ci").textContent = fmtTime(active.checkIn)||"——";
+    document.getElementById("meta-br").textContent = active.breakMs ? fmtDur(active.breakMs)?.hm : "——";
+  } else metaEl.style.display="none";
+
+  // Card border
+  const card = document.getElementById("main-card");
+  card.className = "card p-card" + (isWorking&&!isBreak?" green-border":"");
+
+  // Buttons
+  const btnRow = document.getElementById("btn-row");
+  btnRow.innerHTML = "";
+  if(!isWorking) {
+    const b = btn(todayShifts.length>0?"▶ NEW SHIFT":"▶ CHECK IN","green",()=>checkIn());
+    b.style.width="100%"; btnRow.appendChild(b);
+  } else if(!isBreak) {
+    const br = btn("⏸ BREAK","amber",()=>startBreak()); br.style.flex="1"; btnRow.appendChild(br);
+    const co = btn("■ CHECK OUT","red",()=>checkOut()); co.style.flex="2"; btnRow.appendChild(co);
+  } else {
+    const eb = btn("▶ END BREAK","amber",()=>endBreak()); eb.style.width="100%"; btnRow.appendChild(eb);
+  }
+
+  // Today shifts
+  const wrap = document.getElementById("today-shifts-wrap");
+  const list = document.getElementById("today-shifts");
+  if(todayShifts.length>0) {
+    wrap.style.display="block";
+    list.innerHTML = todayShifts.map((sh,i)=>{
+      const ms=shiftMs(sh), live=active&&sh.id===active.id;
+      const dur=live?(liveDur?.hm||"—"):(fmtDur(ms)?.hm||"—");
+      return `<div class="shift-row">
+        <div class="sr-left">
+          <span class="shift-idx">S${i+1}</span>
+          <span class="ci">↑ ${fmtTime(sh.checkIn)}</span>
+          ${sh.checkOut?`<span class="co">↓ ${fmtTime(sh.checkOut)}`:`<span class="pill ${live?"pill-green":"pill-amber"}">${live?"ACTIVE":"INCOMPLETE"}</span>`}
+          ${sh.checkOut?"</span>":""}
+        </div>
+        <span class="sr-dur ${ms||live?"has-val":""}">${dur}</span>
+      </div>`;
+    }).join("");
+  } else wrap.style.display="none";
+
+  // Week chart
+  const ws = weekStart(today);
+  const weekData = Array.from({length:7},(_,i)=>{
+    const d=new Date(ws); d.setDate(d.getDate()+i);
+    const key=d.toISOString().slice(0,10);
+    return {label:["Mo","Tu","We","Th","Fr","Sa","Su"][i],ms:dayTotalMs(records[key])+(key===today?(liveMs||0):0)};
+  });
+  const weekMs = weekData.reduce((a,d)=>a+d.ms,0);
+  const maxMs = 9*3600000;
+  document.getElementById("week-total").textContent = fmtDur(weekMs)?.hm||"0h 00m";
+  document.getElementById("week-bars").innerHTML = weekData.map(d=>{
+    const pct=Math.max(d.ms>0?4:0,d.ms/maxMs*100);
+    const color=d.ms/maxMs>0.85?"var(--green)":"var(--blue)";
+    return `<div class="bar-wrap"><div class="bar-inner"><div class="bar" style="height:${pct}%;background:${color};opacity:${d.ms>0?1:0.15}"></div></div><span class="bar-lbl">${d.label}</span></div>`;
+  }).join("");
+  const wkDays=weekData.filter(d=>d.ms>0).length;
+  document.getElementById("week-days-label").textContent=`${wkDays} day${wkDays!==1?"s":""}`;
+  document.getElementById("week-progress").style.width=`${Math.min(weekMs/(45*3600000)*100,100)}%`;
+
+  // Stats
+  const allDays=Object.entries(records).filter(([,ss])=>ss.some(s=>shiftMs(s)!==null));
+  const totalMs=allDays.flatMap(([,ss])=>ss).reduce((a,s)=>a+(shiftMs(s)||0),0);
+  const avgMs=allDays.length?totalMs/allDays.length:0;
+  const monthExp=expenses.filter(e=>e.date.startsWith(monthOf(today))).reduce((a,e)=>a+e.amount,0);
+  document.getElementById("stat-total").textContent=fmtDur(totalMs)?.hm||"—";
+  document.getElementById("stat-avg").textContent=fmtDur(avgMs)?.hm||"—";
+  document.getElementById("stat-exp").textContent=monthExp>0?`A$${fmtMoney(monthExp)}`:"—";
+}
+
+// ── check in/out ──────────────────────────────────────────────────────────────
+function checkIn() {
+  const today=todayISO();
+  if(!records[today]) records[today]=[];
+  records[today].push({id:uid(),checkIn:new Date().toISOString(),checkOut:null,breakMs:0,note:""});
+  scheduleSync(); renderAll();
+}
+function checkOut() {
+  const today=todayISO();
+  records[today]=(records[today]||[]).map(s=>{
+    if(!s.checkOut&&s.checkIn){let bMs=s.breakMs||0;if(s.breakStart)bMs+=Date.now()-new Date(s.breakStart);return{...s,checkOut:new Date().toISOString(),breakMs:bMs,breakStart:undefined};}
+    return s;
+  });
+  scheduleSync(); renderAll();
+}
+function startBreak() {
+  const today=todayISO();
+  const active=records[today]?.find(s=>s.checkIn&&!s.checkOut);
+  if(!active) return;
+  records[today]=records[today].map(s=>s.id===active.id?{...s,breakStart:new Date().toISOString()}:s);
+  scheduleSync(); renderAll();
+}
+function endBreak() {
+  const today=todayISO();
+  const active=records[today]?.find(s=>s.checkIn&&!s.checkOut);
+  if(!active) return;
+  records[today]=records[today].map(s=>{if(s.id!==active.id)return s;return{...s,breakMs:(s.breakMs||0)+(Date.now()-new Date(s.breakStart)),breakStart:undefined};});
+  scheduleSync(); renderAll();
+}
+function deleteShift(date,id) {
+  records[date]=(records[date]||[]).filter(s=>s.id!==id);
+  if(records[date].length===0) delete records[date];
+  scheduleSync(); renderAll();
+}
+
+// ── log ───────────────────────────────────────────────────────────────────────
+function initForms() {
+  const today=todayISO();
+  document.getElementById("m-date").value=today;
+  document.getElementById("e-date").value=today;
+  document.getElementById("toggle-add-shift").onclick=()=>{
+    const f=document.getElementById("add-shift-form");
+    const open=f.style.display==="none";
+    f.style.display=open?"block":"none";
+    document.getElementById("toggle-add-shift").textContent=open?"✕  CLOSE":"+ ADD MANUAL SHIFT";
+    document.getElementById("toggle-add-shift").classList.toggle("open",open);
+  };
+  document.getElementById("toggle-add-exp").onclick=()=>{
+    const f=document.getElementById("add-exp-form");
+    const open=f.style.display==="none";
+    f.style.display=open?"block":"none";
+    document.getElementById("toggle-add-exp").textContent=open?"✕  CLOSE":"+ ADD EXPENSE";
+    document.getElementById("toggle-add-exp").classList.toggle("open",open);
+  };
+  renderCatChips();
+}
+
+function renderCatChips() {
+  document.getElementById("cat-chips").innerHTML=CATS.map(c=>`<button class="cat-chip ${c===currentCat?"active":""}" onclick="setCat('${c}')">${CAT_ICONS[c]} ${c}</button>`).join("");
+}
+function setCat(c) { currentCat=c; renderCatChips(); }
+
+function saveManual() {
+  const dateVal=document.getElementById("m-date").value;
+  const inVal=document.getElementById("m-in").value;
+  const outVal=document.getElementById("m-out").value;
+  const noteVal=document.getElementById("m-note").value;
+  const errEl=document.getElementById("m-err");
+  errEl.style.display="none";
+  if(!dateVal||!inVal){errEl.textContent="Date and check-in time are required.";errEl.style.display="block";return;}
+  const ci=new Date(`${dateVal}T${inVal}`);
+  let co=null;
+  if(outVal){
+    co=new Date(`${dateVal}T${outVal}`);
+    if(co<=ci){const nd=new Date(dateVal);nd.setDate(nd.getDate()+1);co=new Date(`${nd.toISOString().slice(0,10)}T${outVal}`);}
+  }
+  if(!records[dateVal]) records[dateVal]=[];
+  records[dateVal].push({id:uid(),checkIn:ci.toISOString(),checkOut:co?.toISOString()||null,breakMs:0,note:noteVal});
+  document.getElementById("m-in").value="";document.getElementById("m-out").value="";document.getElementById("m-note").value="";
+  document.getElementById("add-shift-form").style.display="none";
+  document.getElementById("toggle-add-shift").textContent="+ ADD MANUAL SHIFT";
+  document.getElementById("toggle-add-shift").classList.remove("open");
+  scheduleSync(); renderAll();
+}
+
+function isPaidDate(date) {
+  // A date is "paid" if there's a payment recorded on or after that date
+  if(!payments.length) return false;
+  return payments.some(p => p.paidAt.slice(0,10) >= date);
+}
+
+function renderLog() {
+  const today=todayISO();
+  const days=Object.entries(records).sort(([a],[b])=>b.localeCompare(a));
+  const list=document.getElementById("log-list");
+  if(days.length===0){list.innerHTML='<div class="empty">No records found</div>';return;}
+  list.innerHTML=days.map(([date,shifts])=>{
+    const total=dayTotalMs(shifts);
+    const isToday=date===today;
+    const active=shifts.find(s=>s.checkIn&&!s.checkOut);
+    const paid=isPaidDate(date);
+    return `<div class="card day-card" style="margin-top:0;border-color:${isToday?"var(--green-border)":paid?"rgba(167,139,250,0.2)":"var(--border)"}">
+      <div class="day-header">
+        <div class="day-title">
+          ${fmtDay(date)}
+          ${isToday?'<span class="pill pill-green">TODAY</span>':''}
+          ${paid?'<span class="pill pill-purple">PAID</span>':'<span class="pill pill-amber">UNPAID</span>'}
+          <span class="pill pill-muted">${shifts.length} shift${shifts.length!==1?"s":""}</span>
+        </div>
+        <div class="day-total ${total>0?"has-val":""}">${fmtDur(total)?.hm||"—"}</div>
+      </div>
+      ${shifts.map((sh,i)=>{
+        const ms=shiftMs(sh);const isActive=active&&sh.id===active.id;
+        return `<div class="shift-item" style="opacity:${paid?0.7:1}">
+          <div>
+            <div class="si-meta">SHIFT ${i+1}${isActive?'<span class="pill pill-green">ACTIVE</span>':''}${!sh.checkOut&&!isActive?'<span class="pill pill-amber">INCOMPLETE</span>':''}${sh.note?`<span>· ${sh.note}</span>`:''}</div>
+            <div class="si-times"><span class="ci">↑ ${fmtTime(sh.checkIn)}</span>${sh.checkOut?`<span class="co">↓ ${fmtTime(sh.checkOut)}</span>`:""}${sh.breakMs>0?`<span class="br">⏸ ${fmtDur(sh.breakMs)?.hm}</span>`:""}</div>
+          </div>
+          <div class="si-right">
+            <span class="si-dur ${ms?"has-val":""}">${fmtDur(ms)?.hm||"—"}</span>
+            ${!isActive&&!paid?`<button class="del-btn" onclick="deleteShift('${date}','${sh.id}')">×</button>`:""}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join('<div style="height:0"></div>');
+}
+
+// ── expenses ──────────────────────────────────────────────────────────────────
+function handlePhoto(input) {
+  const file=input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    currentPhoto=ev.target.result;
+    document.getElementById("e-photo-wrap").innerHTML=`<div class="photo-preview"><img src="${currentPhoto}" onclick="openLightbox('${currentPhoto}')"><button class="photo-del" onclick="clearPhoto()">×</button></div>`;
+  };
+  reader.readAsDataURL(file);
+}
+function clearPhoto(){currentPhoto=null;document.getElementById("e-photo-wrap").innerHTML='<button class="photo-placeholder" onclick="document.getElementById(\'e-photo-input\').click()">📷  Add Photo</button>';}
+
+function saveExpense() {
+  const desc=document.getElementById("e-desc").value.trim();
+  const amt=document.getElementById("e-amt").value;
+  const date=document.getElementById("e-date").value;
+  const errEl=document.getElementById("e-err");
+  errEl.style.display="none";
+  if(!desc){errEl.textContent="Description is required.";errEl.style.display="block";return;}
+  if(!amt||isNaN(Number(amt))||Number(amt)<=0){errEl.textContent="Enter a valid amount.";errEl.style.display="block";return;}
+  expenses.unshift({id:uid(),date,desc,amount:Number(amt),cat:currentCat,photo:currentPhoto,createdAt:new Date().toISOString()});
+  document.getElementById("e-desc").value="";document.getElementById("e-amt").value="";
+  clearPhoto(); currentCat="Food"; renderCatChips();
+  document.getElementById("add-exp-form").style.display="none";
+  document.getElementById("toggle-add-exp").textContent="+ ADD EXPENSE";
+  document.getElementById("toggle-add-exp").classList.remove("open");
+  scheduleSync(); renderExpenses();
+  document.getElementById("stat-exp").textContent=`A$${fmtMoney(expenses.filter(e=>e.date.startsWith(monthOf(todayISO()))).reduce((a,e)=>a+e.amount,0))}`;
+}
+function deleteExpense(id){expenses=expenses.filter(e=>e.id!==id);scheduleSync();renderExpenses();}
+
+function renderExpenses() {
+  const today=todayISO();
+  const monthExp=expenses.filter(e=>e.date.startsWith(monthOf(today))).reduce((a,e)=>a+e.amount,0);
+  const totalExp=expenses.reduce((a,e)=>a+e.amount,0);
+  document.getElementById("exp-month").textContent=`A$${fmtMoney(monthExp)}`;
+  document.getElementById("exp-total").textContent=`A$${fmtMoney(totalExp)}`;
+  const list=document.getElementById("exp-list");
+  if(expenses.length===0){list.innerHTML='<div class="empty">No expenses yet</div>';return;}
+  list.innerHTML=expenses.map(exp=>`
+    <div class="card exp-card" style="margin-top:0">
+      <div class="exp-inner">
+        ${exp.photo?`<img class="exp-thumb" src="${exp.photo}" onclick="openLightbox('${exp.photo}')" alt="">`:`<div class="exp-icon">${CAT_ICONS[exp.cat]||"📋"}</div>`}
+        <div class="exp-info">
+          <div class="exp-top"><span class="exp-desc">${exp.desc}</span><span class="exp-amt">A$${fmtMoney(exp.amount)}</span></div>
+          <div class="exp-bottom"><span class="exp-date">${fmtDay(exp.date)}</span><span class="pill pill-purple">${CAT_ICONS[exp.cat]} ${exp.cat}</span></div>
+        </div>
+        <button class="del-btn" onclick="deleteExpense('${exp.id}')">×</button>
+      </div>
+    </div>`).join('<div style="height:0"></div>');
+}
+
+// ── report ────────────────────────────────────────────────────────────────────
+function setReportPeriod(p) {
+  reportPeriod=p;
+  document.getElementById("report-week-btn").classList.toggle("active",p==="week");
+  document.getElementById("report-month-btn").classList.toggle("active",p==="month");
+  renderReport();
+}
+
+function renderReport() {
+  const today=todayISO();
+  const ws=weekStart(today);
+  const content=document.getElementById("report-content");
+
+  if(reportPeriod==="week") {
+    const allWeeks=[...new Set(Object.keys(records).map(weekStart))].sort().reverse();
+    if(allWeeks.length===0){content.innerHTML='<div class="no-data">No data yet</div>';return;}
+    content.innerHTML=allWeeks.map(w=>{
+      const data=Array.from({length:7},(_,i)=>{const d=new Date(w);d.setDate(d.getDate()+i);const key=d.toISOString().slice(0,10);return{key,label:["Mo","Tu","We","Th","Fr","Sa","Su"][i],ms:dayTotalMs(records[key])};});
+      const ms=data.reduce((a,d)=>a+d.ms,0);const days=data.filter(d=>d.ms>0).length;
+      const we=new Date(w);we.setDate(we.getDate()+6);
+      const label=`${new Date(w).toLocaleDateString("en-AU",{day:"numeric",month:"short"})} – ${we.toLocaleDateString("en-AU",{day:"numeric",month:"short"})}`;
+      const isThis=w===ws;
+      const wkExp=expenses.filter(e=>e.date>=w&&e.date<=we.toISOString().slice(0,10)).reduce((a,e)=>a+e.amount,0);
+      const maxMs=9*3600000;
+      return `<div class="card report-card" style="border-color:${isThis?"var(--border-hi)":"var(--border)"}">
+        <div class="report-header">
+          <div><div style="display:flex;gap:8px;align-items:center"><span class="report-title">${label}</span>${isThis?'<span class="pill pill-blue">THIS WEEK</span>':''}</div>
+          <div class="report-sub">${days} day${days!==1?"s":""}  ·  Avg ${fmtDur(days>0?ms/days:0)?.hm||"—"}/day${wkExp>0?` · A$${fmtMoney(wkExp)}`:""}</div></div>
+          <div class="report-total">${fmtDur(ms)?.hm||"0h"}</div>
+        </div>
+        <div class="bar-chart" style="margin-top:16px">${data.map(d=>{const pct=Math.max(d.ms>0?4:0,d.ms/maxMs*100);return`<div class="bar-wrap"><div class="bar-inner"><div class="bar" style="height:${pct}%;background:${d.ms/maxMs>0.85?"var(--green)":"var(--blue)"};opacity:${d.ms>0?1:0.15}"></div></div><span class="bar-lbl">${d.label}</span></div>`}).join("")}</div>
+        <div class="breakdown">${data.filter(d=>d.ms>0).map(d=>`<div class="breakdown-row"><span>${fmtDay(d.key)}</span><span>${fmtDur(d.ms)?.hm}</span></div>`).join("")}</div>
+      </div>`;
+    }).join('<div style="height:0"></div>');
+  } else {
+    const allMonths=[...new Set(Object.keys(records).map(monthOf))].sort().reverse();
+    if(allMonths.length===0){content.innerHTML='<div class="no-data">No data yet</div>';return;}
+    const thisMonth=monthOf(today);
+    content.innerHTML=allMonths.map(ym=>{
+      const [y,m]=ym.split("-").map(Number),dim=new Date(y,m,0).getDate();
+      const weeks=[];for(let w=0;w<Math.ceil(dim/7);w++){let ms=0;for(let day=w*7+1;day<=Math.min((w+1)*7,dim);day++)ms+=dayTotalMs(records[`${ym}-${pad(day)}`]);weeks.push({label:`W${w+1}`,ms});}
+      const mTotal=weeks.reduce((a,w)=>a+w.ms,0);
+      const mDays=Object.keys(records).filter(k=>k.startsWith(ym)).length;
+      const isThis=ym===thisMonth;
+      const mExp=expenses.filter(e=>e.date.startsWith(ym)).reduce((a,e)=>a+e.amount,0);
+      const maxWk=Math.max(...weeks.map(w=>w.ms),1);
+      return `<div class="card report-card" style="border-color:${isThis?"var(--border-hi)":"var(--border)"}">
+        <div class="report-header">
+          <div><div style="display:flex;gap:8px;align-items:center"><span class="report-title" style="font-size:14px;text-transform:capitalize">${fmtMonth(ym)}</span>${isThis?'<span class="pill pill-blue">THIS MONTH</span>':''}</div>
+          <div class="report-sub">${mDays} day${mDays!==1?"s":""}${mExp>0?` · A$${fmtMoney(mExp)} expenses`:""}</div></div>
+          <div class="report-total">${fmtDur(mTotal)?.hm||"0h"}</div>
+        </div>
+        <div class="bar-chart" style="margin-top:16px">${weeks.map(w=>{const pct=Math.max(w.ms>0?4:0,w.ms/maxWk*100);return`<div class="bar-wrap"><div class="bar-inner"><div class="bar" style="height:${pct}%;background:var(--blue);opacity:${w.ms>0?1:0.15}"></div></div><span class="bar-lbl">${w.label}</span></div>`}).join("")}</div>
+        <div class="breakdown">${Object.entries(records).filter(([k])=>k.startsWith(ym)).sort(([,a],[,b])=>dayTotalMs(b)-dayTotalMs(a)).slice(0,3).map(([k,ss])=>`<div class="breakdown-row"><span>${fmtDay(k)}</span><span>${fmtDur(dayTotalMs(ss))?.hm}</span></div>`).join("")}</div>
+      </div>`;
+    }).join('<div style="height:0"></div>');
+  }
+}
+
+// ── lightbox ──────────────────────────────────────────────────────────────────
+function openLightbox(src){document.getElementById("lightbox-img").src=src;document.getElementById("lightbox").classList.add("open");}
+function closeLightbox(){document.getElementById("lightbox").classList.remove("open");}
+
+// ── button helper ─────────────────────────────────────────────────────────────
+function btn(text, color, onClick) {
+  const b=document.createElement("button");
+  b.className=`btn btn-${color}`;b.textContent=text;b.onclick=onClick;return b;
+}
+
+// ── payments ─────────────────────────────────────────────────────────────────
+function getUnpaidData() {
+  // Only count records/expenses that are NOT covered by any payment
+  let totalMs = 0;
+  let expTotal = 0;
+  for(const [date, shifts] of Object.entries(records)) {
+    if(isPaidDate(date)) continue;
+    totalMs += dayTotalMs(shifts);
+  }
+  for(const exp of expenses) {
+    if(isPaidDate(exp.date)) continue;
+    expTotal += exp.amount;
+  }
+  return { totalMs, expTotal };
+}
+
+function openPayModal() {
+  const { totalMs, expTotal } = getUnpaidData();
+  document.getElementById("pay-hours").textContent = fmtDur(totalMs)?.hm || "0h 00m";
+  document.getElementById("pay-exps").textContent = `A$${fmtMoney(expTotal)}`;
+  document.getElementById("pay-note").value = "";
+  document.getElementById("pay-modal-bg").classList.add("open");
+}
+function closePayModal() { document.getElementById("pay-modal-bg").classList.remove("open"); }
+
+function confirmPayment() {
+  const { totalMs, expTotal } = getUnpaidData();
+  const note = document.getElementById("pay-note").value.trim();
+  payments.push({
+    id: uid(),
+    paidAt: new Date().toISOString(),
+    totalMs,
+    expTotal,
+    note,
+  });
+  closePayModal();
+  scheduleSync();
+  renderPayments();
+  renderHome();
+}
+
+function renderPayments() {
+  const { totalMs, expTotal } = getUnpaidData();
+  const dur = fmtDur(totalMs);
+
+  // Unpaid banner
+  document.getElementById("pay-unpaid-banner").innerHTML = `
+    <div class="card p-card-sm" style="border-color:var(--green-border);margin-bottom:0">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.14em;margin-bottom:12px">UNPAID BALANCE</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div>
+          <div style="font-size:36px;font-weight:800;color:var(--green);line-height:1">${dur?.hm||"0h 00m"}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">since last payment</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:18px;font-weight:700;color:var(--purple)">A$${fmtMoney(expTotal)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">expenses</div>
+        </div>
+      </div>
+      <button class="btn btn-green btn-full" onclick="openPayModal()">💰 MARK AS PAID</button>
+    </div>`;
+
+  // Payment history
+  const histEl = document.getElementById("pay-history");
+  if(payments.length === 0) { histEl.innerHTML = '<div class="no-data" style="padding-top:20px">No payments recorded yet</div>'; return; }
+  histEl.innerHTML = `
+    <div style="font-size:10px;color:var(--muted);letter-spacing:0.14em;margin:16px 0 8px">PAYMENT HISTORY</div>
+    ${[...payments].reverse().map((p,i) => `
+      <div class="card pay-card" style="margin-bottom:8px">
+        <div class="pay-item" style="margin:0">
+          <div class="pay-item-left">
+            <div class="pay-date">${p.note || "Payment"} <span style="font-size:10px;color:var(--muted)">· #${payments.length - i}</span></div>
+            <div class="pay-meta">${new Date(p.paidAt).toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"})}</div>
+          </div>
+          <div class="pay-item-right">
+            <div class="pay-hrs">${fmtDur(p.totalMs)?.hm||"0h"}</div>
+            ${p.expTotal > 0 ? `<div class="pay-exp">A$${fmtMoney(p.expTotal)}</div>` : ""}
+          </div>
+        </div>
+      </div>`).join("")}`;
+}
+
+// ── import / export ──────────────────────────────────────────────────────────
+function importData() {
+  const text = document.getElementById("import-text").value.trim();
+  const errEl = document.getElementById("import-err");
+  const okEl = document.getElementById("import-ok");
+  errEl.style.display = "none"; okEl.style.display = "none";
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed.records) { errEl.textContent = "Invalid data — missing records."; errEl.style.display = "block"; return; }
+    // Merge records
+    for (const [date, shifts] of Object.entries(parsed.records)) {
+      if (!records[date]) { records[date] = shifts; continue; }
+      const existIds = new Set(records[date].map(s => s.id));
+      const extra = (Array.isArray(shifts) ? shifts : []).filter(s => !existIds.has(s.id));
+      if (extra.length) records[date] = [...records[date], ...extra];
+    }
+    // Merge expenses
+    if (parsed.expenses) {
+      const existIds = new Set(expenses.map(e => e.id));
+      const extra = parsed.expenses.filter(e => !existIds.has(e.id));
+      expenses = [...expenses, ...extra];
+    }
+    document.getElementById("import-text").value = "";
+    okEl.style.display = "block";
+    setTimeout(() => okEl.style.display = "none", 4000);
+    scheduleSync(); renderAll();
+  } catch(_) { errEl.textContent = "Invalid JSON — check your data."; errEl.style.display = "block"; }
+}
+
+function exportData() {
+  const text = JSON.stringify({ records, expenses }, null, 2);
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById("export-btn");
+    btn.textContent = "✓ COPIED!"; btn.style.color = "var(--green)";
+    setTimeout(() => { btn.textContent = "COPY TO CLIPBOARD"; btn.style.color = "var(--muted)"; }, 2500);
+  }).catch(() => {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+    const btn = document.getElementById("export-btn");
+    btn.textContent = "✓ COPIED!"; btn.style.color = "var(--green)";
+    setTimeout(() => { btn.textContent = "COPY TO CLIPBOARD"; btn.style.color = "var(--muted)"; }, 2500);
+  });
+}
+
+// ── start ─────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
